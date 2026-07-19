@@ -16,12 +16,12 @@ test('uses the direct OpenAI endpoint by default', () => {
 
 test('supports a server-configured Responses-compatible provider', () => {
   const provider = getProviderConfig({
-    OVERLEAF_AI_API_KEY: 'local-only',
-    OVERLEAF_AI_BASE_URL: 'http://192.168.178.74:18000/v1/',
+    OVERLEAF_AI_API_KEY: 'proxy-test-token',
+    OVERLEAF_AI_BASE_URL: 'http://10.0.0.5:18000/v1/',
     OVERLEAF_AI_PROVIDER_LABEL: 'ChatMock (local network)',
   })
-  assert.equal(provider.apiKey, 'local-only')
-  assert.equal(provider.baseURL, 'http://192.168.178.74:18000/v1')
+  assert.equal(provider.apiKey, 'proxy-test-token')
+  assert.equal(provider.baseURL, 'http://10.0.0.5:18000/v1')
   assert.equal(provider.label, 'ChatMock (local network)')
   assert.equal(provider.isDirectOpenAI, false)
 })
@@ -31,7 +31,7 @@ test('fails closed for malformed or credential-bearing provider URLs', () => {
   assert.throws(() => normalizeBaseUrl('http://user:pass@127.0.0.1/v1'))
   assert.equal(
     getProviderConfig({
-      OVERLEAF_AI_API_KEY: 'local-only',
+      OVERLEAF_AI_API_KEY: 'proxy-test-token',
       OVERLEAF_AI_BASE_URL: 'file:///tmp/provider',
     }).configured,
     false

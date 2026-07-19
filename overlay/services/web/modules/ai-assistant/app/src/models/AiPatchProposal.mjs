@@ -7,8 +7,9 @@ const AiPatchHunkSchema = new Schema(
   {
     from: { type: Number, required: true, min: 0 },
     to: { type: Number, required: true, min: 0 },
-    oldText: { type: String, required: true },
-    newText: { type: String, required: true },
+    // Insertions intentionally have empty oldText; deletions may have empty newText.
+    oldText: { type: String, default: '' },
+    newText: { type: String, default: '' },
     description: { type: String, default: '' },
   },
   { _id: false }

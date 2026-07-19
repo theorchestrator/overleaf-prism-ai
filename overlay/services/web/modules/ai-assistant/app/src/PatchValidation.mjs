@@ -1,6 +1,57 @@
 export const MAX_HUNKS_PER_FILE = 40
 export const MAX_REPLACEMENT_CHARS = 250000
 
+function lineStarts(content) {
+  const starts = [0]
+  for (let index = 0; index < content.length; index += 1) {
+    if (content[index] === '\n') starts.push(index + 1)
+  }
+  return starts
+}
+
+function withTrailingNewline(text) {
+  return text && !text.endsWith('\n') ? `${text}\n` : text
+}
+
+export function resolveLineHunks(content, requestedHunks) {
+  const starts = lineStarts(content)
+  const lineCount = starts.length
+  return requestedHunks.map(hunk => {
+    const startLine = hunk.startLine
+    const endLine = hunk.endLine
+    if (!Number.isInteger(startLine) || !Number.isInteger(endLine)) {
+      throw new Error('Patch line numbers must be integers')
+    }
+    if (startLine < 1 || startLine > lineCount || endLine < startLine || endLine > lineCount) {
+      throw new Error(`Patch lines are outside the current document (1-${lineCount})`)
+    }
+    if (typeof hunk.newText !== 'string' || typeof hunk.description !== 'string') {
+      throw new Error('Patch replacement and description must be strings')
+    }
+
+    if (hunk.operation === 'insert_before_line') {
+      const from = starts[startLine - 1]
+      return { from, to: from, oldText: '', newText: withTrailingNewline(hunk.newText), description: hunk.description }
+    }
+    if (hunk.operation === 'insert_after_line') {
+      if (endLine < lineCount) {
+        const from = starts[endLine]
+        return { from, to: from, oldText: '', newText: withTrailingNewline(hunk.newText), description: hunk.description }
+      }
+      const prefix = content && !content.endsWith('\n') ? '\n' : ''
+      return { from: content.length, to: content.length, oldText: '', newText: `${prefix}${hunk.newText}`, description: hunk.description }
+    }
+    if (hunk.operation === 'replace_lines') {
+      const from = starts[startLine - 1]
+      const to = endLine < lineCount ? starts[endLine] : content.length
+      const oldText = content.slice(from, to)
+      const newText = oldText.endsWith('\n') ? withTrailingNewline(hunk.newText) : hunk.newText
+      return { from, to, oldText, newText, description: hunk.description }
+    }
+    throw new Error(`Unsupported patch operation: ${hunk.operation}`)
+  })
+}
+
 export function validateHunks(content, hunks) {
   if (!Array.isArray(hunks) || hunks.length === 0 || hunks.length > MAX_HUNKS_PER_FILE) {
     throw new Error('A patch file must contain between 1 and 40 hunks')

@@ -10,6 +10,8 @@ import { getProviderConfig } from './AiProviderConfig.mjs'
 import {
   buildManifest,
   buildSystemPrompt,
+  findProjectFiles,
+  listSourceComments,
   normalizeDocument,
   searchDocuments,
 } from './ContextBuilder.mjs'
@@ -78,10 +80,19 @@ function activeSnapshot(docs, requested) {
   const content = normalizeDocument(doc.lines)
   const from = Math.max(0, Math.min(content.length, Number(requested.selection?.from) || 0))
   const to = Math.max(from, Math.min(content.length, Number(requested.selection?.to) || from))
+  const lines = Array.isArray(doc.lines) ? doc.lines : content.split('\n')
+  const cursorLine = content.slice(0, from).split('\n').length
+  const contextStart = Math.max(1, cursorLine - 5)
+  const contextEnd = Math.min(lines.length, cursorLine + 5)
   return {
     path,
     docId: doc._id.toString(),
     revision: doc.rev,
+    cursorLine,
+    nearbyLines: lines.slice(contextStart - 1, contextEnd).map((text, index) => ({
+      line: contextStart + index,
+      text,
+    })),
     selection: from === to ? null : { from, to, text: content.slice(from, to) },
   }
 }
@@ -97,9 +108,13 @@ function patchSchema() {
           hunks: z
             .array(
               z.object({
-                from: z.number().int().nonnegative(),
-                to: z.number().int().nonnegative(),
-                oldText: z.string(),
+                operation: z.enum([
+                  'insert_before_line',
+                  'insert_after_line',
+                  'replace_lines',
+                ]),
+                startLine: z.number().int().positive(),
+                endLine: z.number().int().positive(),
                 newText: z.string(),
                 description: z.string().max(2000),
               })
@@ -117,9 +132,19 @@ function projectTools({ projectId, ownerId, conversationId, docs, manifest, comp
   let remainingContextChars = maxContextChars
   return {
     list_project_files: {
-      description: 'List the readable project documents and their current revisions.',
+      description: 'List all project entries, including readable text documents and uploaded image or binary files.',
       inputSchema: z.object({}),
       execute: async () => ({ files: manifest }),
+    },
+    find_project_files: {
+      description: 'Search filenames and project-relative paths across all documents and uploaded assets, including images.',
+      inputSchema: z.object({ query: z.string().min(1).max(500) }),
+      execute: async ({ query }) => ({ files: findProjectFiles(manifest, query) }),
+    },
+    list_source_comments: {
+      description: 'List non-empty LaTeX source comments with exact file paths and line numbers. Use this for comments, TODOs, markers, and author notes.',
+      inputSchema: z.object({ path: z.string().min(1).max(1000).optional() }),
+      execute: async ({ path }) => ({ comments: listSourceComments(docs, path) }),
     },
     read_project_file: {
       description: 'Read one current project text document by its exact project-relative path.',
@@ -135,7 +160,10 @@ function projectTools({ projectId, ownerId, conversationId, docs, manifest, comp
           path,
           docId: doc._id.toString(),
           revision: doc.rev,
-          content: provided,
+          lines: provided.split('\n').map((text, index) => ({
+            line: index + 1,
+            text,
+          })),
           truncated: content.length > allowed,
         }
       },
@@ -157,7 +185,7 @@ function projectTools({ projectId, ownerId, conversationId, docs, manifest, comp
     },
     propose_patch: {
       description:
-        'Create a reviewed patch proposal. This never writes documents; the user must approve it in Overleaf.',
+        'Create a reviewed line-based patch proposal. Use the exact 1-based line numbers returned by read_project_file. For insert operations set startLine and endLine to the target line. This never writes documents; the user must approve it in Overleaf.',
       inputSchema: patchSchema(),
       execute: async input => ({
         proposal: await createPatchProposal({
@@ -194,14 +222,15 @@ async function responses(req, res) {
   await AiMessage.create({ conversationId: conversation._id, projectId: currentProjectId, userId: ownerId, role: 'user', content: prompt })
   await AiConversation.updateOne({ _id: conversation._id }, { $set: { updatedAt: new Date() } })
 
-  const [docs, history] = await Promise.all([
+  const [docs, files, history] = await Promise.all([
     ProjectEntityHandler.promises.getAllDocs(currentProjectId),
+    ProjectEntityHandler.promises.getAllFiles(currentProjectId),
     AiMessage.find({ conversationId: conversation._id })
       .sort({ createdAt: -1 })
       .limit(MAX_HISTORY_MESSAGES)
       .lean(),
   ])
-  const manifest = buildManifest(docs)
+  const manifest = buildManifest(docs, files)
   const compilerLog = String(req.body.compilerDiagnostics || '').slice(0, MAX_DIAGNOSTIC_CHARS)
   const system = buildSystemPrompt({
     projectManifest: manifest,
@@ -223,6 +252,8 @@ async function responses(req, res) {
   sendJsonLine(res, { type: 'start', conversationId: conversation._id.toString() })
 
   let assistantText = ''
+  let lastToolError = null
+  let patchProposed = false
   try {
     const provider = getProviderConfig()
     const openai = createOpenAI({
@@ -265,6 +296,7 @@ async function responses(req, res) {
       } else if (part.type === 'tool-result') {
         sendJsonLine(res, { type: 'tool_activity', status: 'finished', name: part.toolName })
         if (part.toolName === 'propose_patch' && part.output?.proposal) {
+          patchProposed = true
           sendJsonLine(res, { type: 'patch', proposal: part.output.proposal })
         }
         if (part.toolName === 'request_compile' && part.output?.requested) {
@@ -273,11 +305,14 @@ async function responses(req, res) {
       } else if (part.type === 'source') {
         sendJsonLine(res, { type: 'source', source: part })
       } else if (part.type === 'tool-error') {
-        throw part.error
+        lastToolError = part.error
+        sendJsonLine(res, { type: 'tool_activity', status: 'retrying', name: part.toolName })
       } else if (part.type === 'error') {
         throw part.error
       }
     }
+
+    if (lastToolError && !assistantText && !patchProposed) throw lastToolError
 
     const usage = await result.totalUsage
     await Promise.all([
@@ -343,6 +378,7 @@ async function recordPatch(req, res) {
     userId: userId(req),
     docId: req.body.docId,
     appliedHunkIndexes: req.body.appliedHunkIndexes,
+    appliedAs: req.body.appliedAs,
     resultingHash: req.body.resultingHash,
   })
   if (!result) return res.status(404).json({ error: 'Patch proposal not found.' })

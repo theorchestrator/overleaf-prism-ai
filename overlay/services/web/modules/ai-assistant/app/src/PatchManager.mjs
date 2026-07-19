@@ -1,7 +1,7 @@
 import ProjectEntityHandler from '../../../../app/src/Features/Project/ProjectEntityHandler.mjs'
 import { AiPatchProposal } from './models/AiPatchProposal.mjs'
 import { normalizeDocument, sha256 } from './ContextBuilder.mjs'
-import { validateHunks } from './PatchValidation.mjs'
+import { resolveLineHunks, validateHunks } from './PatchValidation.mjs'
 
 const MAX_FILES = 12
 
@@ -11,19 +11,28 @@ function publicProposal(proposal) {
     title: proposal.title,
     summary: proposal.summary,
     status: proposal.status,
-    files: proposal.files.map(file => ({
-      path: file.path,
-      docId: file.docId.toString(),
-      baseVersion: file.baseVersion,
-      baseHash: file.baseHash,
-      hunks: file.hunks.map(hunk => ({
-        from: hunk.from,
-        to: hunk.to,
-        oldText: hunk.oldText,
-        newText: hunk.newText,
-        description: hunk.description,
-      })),
-    })),
+    files: proposal.files.map(file => {
+      const applications = proposal.applications.filter(
+        item => item.docId.toString() === file.docId.toString()
+      )
+      return {
+        path: file.path,
+        docId: file.docId.toString(),
+        baseVersion: file.baseVersion,
+        baseHash: file.baseHash,
+        appliedHunkIndexes: [
+          ...new Set(applications.flatMap(item => item.appliedHunkIndexes || [])),
+        ].sort((left, right) => left - right),
+        appliedAs: applications.at(-1)?.appliedAs || null,
+        hunks: file.hunks.map(hunk => ({
+          from: hunk.from,
+          to: hunk.to,
+          oldText: hunk.oldText,
+          newText: hunk.newText,
+          description: hunk.description,
+        })),
+      }
+    }),
   }
 }
 
@@ -50,13 +59,14 @@ export async function createPatchProposal({
       entity._id.toString()
     )
     const content = normalizeDocument(latest.lines)
-    validateHunks(content, requestedFile.hunks)
+    const resolvedHunks = resolveLineHunks(content, requestedFile.hunks)
+    validateHunks(content, resolvedHunks)
     normalizedFiles.push({
       path: requestedFile.path,
       docId: entity._id,
       baseVersion: latest.version ?? latest.rev,
       baseHash: sha256(content),
-      hunks: requestedFile.hunks,
+      hunks: resolvedHunks,
     })
   }
 
@@ -109,12 +119,20 @@ export async function validateProposal({ proposalId, projectId, userId }) {
       )
       const content = normalizeDocument(latest.lines)
       const currentHash = sha256(content)
+      const applications = proposal.applications.filter(
+        item => item.docId.toString() === file.docId.toString()
+      )
+      const appliedHunkIndexes = [
+        ...new Set(applications.flatMap(item => item.appliedHunkIndexes || [])),
+      ].sort((left, right) => left - right)
+      const expectedHash = applications.at(-1)?.resultingHash || file.baseHash
       files.push({
         docId: file.docId.toString(),
         path: file.path,
-        status: currentHash === file.baseHash ? 'ready' : 'stale',
+        status: currentHash === expectedHash ? 'ready' : 'stale',
         currentVersion: latest.version ?? latest.rev,
         currentHash,
+        appliedHunkIndexes,
       })
     } catch {
       files.push({
@@ -133,6 +151,7 @@ export async function recordApplication({
   userId,
   docId,
   appliedHunkIndexes,
+  appliedAs,
   resultingHash,
 }) {
   const proposal = await getOwnedProposal({ proposalId, projectId, userId })
@@ -151,8 +170,17 @@ export async function recordApplication({
   if (!/^[a-f0-9]{64}$/i.test(resultingHash || '')) {
     throw new Error('Resulting document hash is invalid')
   }
-  if (proposal.applications.some(item => item.docId.toString() === docId)) {
-    throw new Error('This proposal already has an application record for the document')
+  if (!['direct', 'tracked'].includes(appliedAs)) {
+    throw new Error('Patch application mode is invalid')
+  }
+  const previousApplications = proposal.applications.filter(
+    item => item.docId.toString() === docId
+  )
+  const previouslyApplied = new Set(
+    previousApplications.flatMap(item => item.appliedHunkIndexes || [])
+  )
+  if (appliedHunkIndexes.some(index => previouslyApplied.has(index))) {
+    throw new Error('One or more patch hunks were already applied')
   }
 
   let observedVersion
@@ -168,6 +196,7 @@ export async function recordApplication({
   proposal.applications.push({
     docId,
     appliedHunkIndexes,
+    appliedAs,
     resultingHash,
     observedVersion,
     observedHash,
@@ -175,8 +204,15 @@ export async function recordApplication({
     approvedBy: userId,
     appliedAt: new Date(),
   })
-  const appliedDocIds = new Set(proposal.applications.map(item => item.docId.toString()))
-  proposal.status = proposal.files.every(item => appliedDocIds.has(item.docId.toString()))
+  const allApplied = proposal.files.every(item => {
+    const indexes = new Set(
+      proposal.applications
+        .filter(application => application.docId.toString() === item.docId.toString())
+        .flatMap(application => application.appliedHunkIndexes || [])
+    )
+    return item.hunks.every((_hunk, index) => indexes.has(index))
+  })
+  proposal.status = allApplied
     ? 'applied'
     : 'partially-applied'
   await proposal.save()

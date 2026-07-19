@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.0-preview.1 - 2026-07-19 - Reviewed Editing Preview
+
+- Added **Edit with AI** to Overleaf's native text-selection toolbar.
+- Added project file discovery and source-comment tools so the assistant can inspect files beyond the active document.
+- Added line-addressed patch operations for reliable insertions, replacements, and repeated comment edits.
+- Added inline CodeMirror diff previews with per-hunk Undo and Keep controls.
+- Added direct-edit and Track Changes application modes through Overleaf's editor and OT lifecycle.
+- Persisted applied hunk state so chat review remains synchronized after approval and conversation reloads.
+- Improved multi-file validation, stale proposal handling, patch auditing, and applied-hunk accounting.
+- Enabled native Overleaf editor tabs for the derivative deployment.
+- Polished the AI rail, proposal cards, buttons, activity display, conversation selector, and local delete confirmation.
+- Fixed the CE+ extension loader integration for selection-toolbar actions.
+
 ## 0.1.1 - 2026-07-19 - ChatMock provider support
 
 - Added a server-only configurable Responses-compatible provider base URL.

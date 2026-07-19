@@ -2,16 +2,20 @@
 
 A project-aware, reviewed AI assistant for self-hosted Overleaf CE+. It adds Prism-like manuscript chat and safe edit proposals while keeping Overleaf's collaborative OT editing model intact.
 
-> Status: Phase 1 preview for `overleafcep/sharelatex:6.2.0-ext-v5.0`, source revision `c7579e3e74b0b23c3cfd969b0b90ef1daf0a6b55`. Test on copied projects before production use.
+> Status: Reviewed Editing Preview for `overleafcep/sharelatex:6.2.0-ext-v5.0`, source revision `c7579e3e74b0b23c3cfd969b0b90ef1daf0a6b55`. Test on copied projects before production use.
 
 ## What works
 
 - Streaming, project-scoped conversations stored in local MongoDB.
 - Context tools for listing, reading, and searching current `.tex`, `.bib`, and other text documents.
 - Current selection and compiler-error context.
+- An **Edit with AI** action in Overleaf's native selection toolbar.
 - Structured multi-file patch proposals with exact old text, offsets, base hashes, and explanations.
-- Explicit per-hunk or per-file approval. Accepted edits go through CodeMirror and Overleaf OT, never direct database or filesystem writes.
+- Inline CodeMirror diff previews with per-hunk Undo/Keep controls and chat-side review state.
+- Explicit per-hunk or per-file approval, with direct-edit or Track Changes application modes. Accepted edits go through CodeMirror and Overleaf OT, never direct database or filesystem writes.
 - Stale-patch blocking before and immediately before application.
+- Project file discovery and source-comment tools, plus line-addressed patch operations for reliable insertions and replacements.
+- Overleaf editor tabs, polished conversation controls, local conversation deletion, and in-panel confirmation.
 - Admin allowlist, global kill switch, daily request limits, monthly token limits, timeouts, cancellation, local usage accounting, and `store:false`.
 - Sanitized Markdown rendering; the provider credential and base URL stay in the server environment.
 
@@ -30,7 +34,7 @@ See [SECURITY.md](SECURITY.md) and [docs/architecture.md](docs/architecture.md).
 ```sh
 docker build \
   --build-arg OVERLEAF_BASE_IMAGE=overleafcep/sharelatex:6.2.0-ext-v5.0 \
-  -t overleaf-prism-ai:0.1.1-phase1 .
+  -t overleaf-prism-ai:0.2.0-preview.1 .
 ```
 
 The multi-stage build restores the dependencies pinned by Overleaf's lockfile, compiles the frontend, and produces a derivative image. It never modifies a running container.
@@ -60,8 +64,8 @@ variable and an explicit base URL. `OVERLEAF_AI_API_KEY` takes precedence over
 the backwards-compatible `OPENAI_API_KEY` variable:
 
 ```dotenv
-OVERLEAF_AI_API_KEY=local-only
-OVERLEAF_AI_BASE_URL=http://192.168.178.74:18000/v1
+OVERLEAF_AI_API_KEY=replace-with-proxy-token
+OVERLEAF_AI_BASE_URL=http://chatmock.internal:18000/v1
 OVERLEAF_AI_PROVIDER_LABEL=ChatMock (local network)
 OVERLEAF_AI_MODEL=gpt-5.6-sol-medium
 OVERLEAF_AI_REASONING_EFFORT=medium
@@ -86,12 +90,12 @@ Do not put provider credentials in `docker-compose.yml`, Git, browser code, Mong
 ```sh
 npm test
 npm run check:overlay
-docker image inspect overleaf-prism-ai:0.1.1-phase1
+docker image inspect overleaf-prism-ai:0.2.0-preview.1
 ```
 
-The GitHub Actions definition is provided at `ci/github-actions-ci.yml`. Copy it
-to `.github/workflows/ci.yml` when the publishing credential has GitHub's
-`workflow` scope.
+GitHub Actions runs the repository checks for pushes and pull requests. A tag
+matching `v*` additionally publishes the pinned `linux/amd64` image to GHCR and
+creates a prerelease with generated notes.
 
 For deployment, back up MongoDB and Overleaf data first, retain the previous image tag, change only the toolkit image/environment settings, and test collaboration, compilation, comments, Zotero, Git Bridge, and WebSockets.
 

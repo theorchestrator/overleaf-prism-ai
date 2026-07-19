@@ -8,6 +8,7 @@ const required = [
   'app/src/AiAssistantRouter.mjs',
   'app/src/AiAssistantController.mjs',
   'frontend/js/components/ai-assistant-panel.tsx',
+  'frontend/js/components/ai-assistant-selection-action.tsx',
 ]
 for (const relative of required) await fs.access(path.join(moduleRoot, relative))
 

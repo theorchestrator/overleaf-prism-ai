@@ -1,0 +1,22 @@
+.ai-assistant-rail { height: 100%; display: flex; flex-direction: column; }
+.ai-assistant-panel { min-height: 0; height: 100%; display: flex; flex-direction: column; background: var(--bg-light-primary); color: var(--content-primary); }
+.ai-disclosure, .ai-assistant-status { padding: 10px 12px; font-size: 12px; border-bottom: 1px solid var(--border-divider); }
+.ai-conversation-bar { display: flex; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--border-divider); }
+.ai-conversation-bar select { min-width: 0; flex: 1; }
+.ai-messages { flex: 1; min-height: 0; overflow: auto; padding: 12px; }
+.ai-welcome { padding: 18px 8px; }
+.ai-message, .ai-proposal { margin-bottom: 12px; padding: 10px; border-radius: 8px; background: var(--bg-light-secondary); overflow-wrap: anywhere; }
+.ai-user { background: var(--green-10); }
+.ai-markdown > :last-child { margin-bottom: 0; }
+.ai-markdown pre { white-space: pre-wrap; }
+.ai-tool { color: var(--content-secondary); font-size: 12px; margin: 8px 0; }
+.ai-proposal { border: 1px solid var(--border-primary); }
+.ai-proposal details { margin-top: 10px; }
+.ai-hunk { display: grid; gap: 6px; margin: 8px 0; padding: 8px; border-left: 3px solid var(--blue-50); }
+.ai-hunk del, .ai-hunk ins { display: block; white-space: pre-wrap; padding: 6px; max-height: 180px; overflow: auto; }
+.ai-hunk del { background: var(--red-10); }
+.ai-hunk ins { background: var(--green-10); text-decoration: none; }
+.ai-error { margin: 8px 12px; padding: 8px; background: var(--red-10); color: var(--red-70); border-radius: 6px; }
+.ai-composer { padding: 10px; border-top: 1px solid var(--border-divider); }
+.ai-composer textarea { width: 100%; resize: vertical; }
+.ai-composer div { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px; }

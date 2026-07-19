@@ -6,12 +6,13 @@ Please report vulnerabilities privately through GitHub Security Advisories. Do n
 
 ## Deployment requirements
 
-- Keep `OPENAI_API_KEY` only in a root-readable/container-secret environment source.
+- Keep `OVERLEAF_AI_API_KEY` or `OPENAI_API_KEY` only in a root-readable/container-secret environment source.
+- Configure `OVERLEAF_AI_BASE_URL` only in the server environment. Never expose provider URL selection to users or the browser.
 - Keep AI disabled by default and use explicit user IDs in the allowlist.
 - Keep Overleaf, CE+, MongoDB, Redis, and the reverse proxy patched.
 - Back up data and retain the previous image before each upgrade.
 - Do not expose the Overleaf origin directly when a trusted reverse proxy is expected.
-- Review OpenAI API retention and regional/data-processing requirements for your manuscripts.
+- Review the configured provider and its upstream service's retention, authentication, terms, and regional/data-processing requirements for manuscripts.
 
 ## Trust boundaries
 

@@ -161,7 +161,7 @@ export default function AiAssistantPanel() {
 
   return (
     <div className="ai-assistant-panel">
-      <div className="ai-disclosure">Relevant manuscript context is sent to OpenAI. Edits are never applied without your approval.</div>
+      <div className="ai-disclosure">Relevant manuscript context is sent to {settings.providerLabel}. Edits are never applied without your approval.</div>
       <div className="ai-conversation-bar">
         <select value={conversationId || ''} onChange={event => loadConversation(event.target.value)} disabled={busy} aria-label="AI conversation">
           <option value="">New conversation</option>

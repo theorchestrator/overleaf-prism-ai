@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.1 - 2026-07-19 - ChatMock provider support
+
+- Added a server-only configurable Responses-compatible provider base URL.
+- Added a generic provider credential with backwards-compatible OpenAI key fallback.
+- Added fail-closed URL validation and provider-aware disclosure text.
+- Documented ChatMock deployment and the local-proxy versus local-inference boundary.
+
 ## 0.1.0-phase1 - 2026-07-19
 
 - Add project-scoped streaming AI conversations with local persistence.

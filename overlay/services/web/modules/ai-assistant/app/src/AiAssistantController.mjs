@@ -6,6 +6,7 @@ import ProjectEntityHandler from '../../../../app/src/Features/Project/ProjectEn
 import { AiConversation } from './models/AiConversation.mjs'
 import { AiMessage } from './models/AiMessage.mjs'
 import { AiPatchProposal } from './models/AiPatchProposal.mjs'
+import { getProviderConfig } from './AiProviderConfig.mjs'
 import {
   buildManifest,
   buildSystemPrompt,
@@ -223,7 +224,11 @@ async function responses(req, res) {
 
   let assistantText = ''
   try {
-    const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY })
+    const provider = getProviderConfig()
+    const openai = createOpenAI({
+      apiKey: provider.apiKey,
+      baseURL: provider.baseURL,
+    })
     const result = streamText({
       model: openai(settings.model),
       system,

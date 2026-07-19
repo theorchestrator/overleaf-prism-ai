@@ -13,7 +13,7 @@ A project-aware, reviewed AI assistant for self-hosted Overleaf CE+. It adds Pri
 - Explicit per-hunk or per-file approval. Accepted edits go through CodeMirror and Overleaf OT, never direct database or filesystem writes.
 - Stale-patch blocking before and immediately before application.
 - Admin allowlist, global kill switch, daily request limits, monthly token limits, timeouts, cancellation, local usage accounting, and `store:false`.
-- Sanitized Markdown rendering; the OpenAI key stays in the server environment.
+- Sanitized Markdown rendering; the provider credential and base URL stay in the server environment.
 
 Not implemented yet: scholarly-source adapters, image-to-LaTeX, voice, review comments, and the full project-owner/admin UI. These are tracked as Phase 2 and Phase 3 work.
 
@@ -21,7 +21,7 @@ Not implemented yet: scholarly-source adapters, image-to-LaTeX, voice, review co
 
 The model can only list/read/search project text, inspect supplied compiler diagnostics, request that the client offer a compile, and propose a patch. It cannot use a shell, Docker, MongoDB, server paths, arbitrary URLs, or apply edits. Manuscripts and tool results are explicitly treated as untrusted data.
 
-Relevant manuscript context is sent to the configured OpenAI API account. Conversations, proposals, approvals, and usage are retained locally. The request uses `store:false`; OpenAI's applicable API abuse-monitoring/data-retention policy still applies.
+Relevant manuscript context is sent to the administrator-configured Responses-compatible provider. Conversations, proposals, approvals, and usage are retained locally. Requests use `store:false`; the configured provider and any upstream service may still have their own retention and safety policies.
 
 See [SECURITY.md](SECURITY.md) and [docs/architecture.md](docs/architecture.md).
 
@@ -30,7 +30,7 @@ See [SECURITY.md](SECURITY.md) and [docs/architecture.md](docs/architecture.md).
 ```sh
 docker build \
   --build-arg OVERLEAF_BASE_IMAGE=overleafcep/sharelatex:6.2.0-ext-v5.0 \
-  -t overleaf-prism-ai:0.1.0-phase1 .
+  -t overleaf-prism-ai:0.1.1-phase1 .
 ```
 
 The multi-stage build restores the dependencies pinned by Overleaf's lockfile, compiles the frontend, and produces a derivative image. It never modifies a running container.
@@ -42,6 +42,8 @@ Add these only to the Overleaf container environment or a protected environment 
 ```dotenv
 OVERLEAF_AI_ENABLED=true
 OPENAI_API_KEY=replace-me
+OVERLEAF_AI_BASE_URL=https://api.openai.com/v1
+OVERLEAF_AI_PROVIDER_LABEL=OpenAI API
 OVERLEAF_AI_ALLOWED_USER_IDS=64f000000000000000000000
 OVERLEAF_AI_MODEL=gpt-5.6-sol
 OVERLEAF_AI_REASONING_EFFORT=high
@@ -53,6 +55,23 @@ OVERLEAF_AI_MAX_CONTEXT_CHARS=300000
 
 AI stays unavailable unless the global switch, API key, and user allowlist all permit the request. `*` is supported for development but is not recommended for an internet-reachable instance.
 
+For a server-controlled Responses-compatible proxy, use the generic credential
+variable and an explicit base URL. `OVERLEAF_AI_API_KEY` takes precedence over
+the backwards-compatible `OPENAI_API_KEY` variable:
+
+```dotenv
+OVERLEAF_AI_API_KEY=local-only
+OVERLEAF_AI_BASE_URL=http://192.168.178.74:18000/v1
+OVERLEAF_AI_PROVIDER_LABEL=ChatMock (local network)
+OVERLEAF_AI_MODEL=gpt-5.6-sol-medium
+OVERLEAF_AI_REASONING_EFFORT=medium
+```
+
+The base URL is trusted deployment configuration and is never accepted from a
+browser or admin API request. A locally hosted proxy does not imply local model
+inference: review the proxy's upstream authentication, data flow, retention,
+and terms before sending manuscripts through it.
+
 Optional cost estimates require current prices supplied by the administrator:
 
 ```dotenv
@@ -60,14 +79,14 @@ OVERLEAF_AI_INPUT_USD_PER_MILLION=0
 OVERLEAF_AI_OUTPUT_USD_PER_MILLION=0
 ```
 
-Do not put the API key in `docker-compose.yml`, Git, browser code, MongoDB, or the admin API.
+Do not put provider credentials in `docker-compose.yml`, Git, browser code, MongoDB, or the admin API.
 
 ## Verification
 
 ```sh
 npm test
 npm run check:overlay
-docker image inspect overleaf-prism-ai:0.1.0-phase1
+docker image inspect overleaf-prism-ai:0.1.1-phase1
 ```
 
 The GitHub Actions definition is provided at `ci/github-actions-ci.yml`. Copy it

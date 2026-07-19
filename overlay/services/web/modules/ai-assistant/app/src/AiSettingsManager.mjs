@@ -1,4 +1,5 @@
 import { AiSettings } from './models/AiSettings.mjs'
+import { getProviderConfig } from './AiProviderConfig.mjs'
 
 function positiveInteger(value, fallback) {
   const parsed = Number.parseInt(value, 10)
@@ -23,6 +24,7 @@ function reasoningEffort() {
 
 export async function getEffectiveSettings() {
   const persisted = await AiSettings.findOne({ key: 'global' }).lean()
+  const provider = getProviderConfig()
   const envAllowed = envAllowedUserIds()
   const persistedAllowed = new Set(
     (persisted?.allowedUserIds || []).map(id => id.toString())
@@ -33,7 +35,9 @@ export async function getEffectiveSettings() {
     enabled:
       process.env.OVERLEAF_AI_ENABLED === 'true' &&
       persisted?.enabled !== false,
-    apiKeyConfigured: Boolean(process.env.OPENAI_API_KEY),
+    apiKeyConfigured: provider.configured,
+    providerConfigurationValid: provider.valid,
+    providerLabel: provider.label,
     model: process.env.OVERLEAF_AI_MODEL || 'gpt-5.6-sol',
     reasoningEffort: reasoningEffort(),
     dailyRequestLimit:
@@ -62,6 +66,7 @@ export async function isUserAllowed(userId) {
     allowed: Boolean(
       settings.enabled &&
         settings.apiKeyConfigured &&
+        settings.providerConfigurationValid &&
         id &&
         (settings.allowedUserIds.has('*') || settings.allowedUserIds.has(id))
     ),
@@ -75,10 +80,11 @@ export async function getPublicSettings(userId) {
     apiKeyConfigured: settings.apiKeyConfigured,
     allowed: settings.allowed,
     model: settings.model,
+    providerLabel: settings.providerLabel,
     dailyRequestLimit: settings.dailyRequestLimit,
     monthlyTokenLimit: settings.monthlyTokenLimit,
     dataDisclosure:
-      'Relevant manuscript context is sent to the configured OpenAI API account. Conversations and patches are stored on this Overleaf server.',
+      `Relevant manuscript context is sent to ${settings.providerLabel}. Conversations and patches are stored on this Overleaf server.`,
   }
 }
 
@@ -90,6 +96,8 @@ export async function getAdminSettings() {
     environmentEnabled: process.env.OVERLEAF_AI_ENABLED === 'true',
     apiKeyConfigured: effective.apiKeyConfigured,
     model: effective.model,
+    providerConfigurationValid: effective.providerConfigurationValid,
+    providerLabel: effective.providerLabel,
     allowedUserIds: [...effective.allowedUserIds],
     dailyRequestLimit: effective.dailyRequestLimit,
     monthlyTokenLimit: effective.monthlyTokenLimit,
